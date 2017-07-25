@@ -20,8 +20,10 @@ import org.semanticweb.owlapi.util.InferredAxiomGenerator
 import org.semanticweb.owlapi.util.InferredEquivalentClassAxiomGenerator
 import org.semanticweb.owlapi.util.InferredOntologyGenerator
 import org.semanticweb.owlapi.util.InferredSubClassAxiomGenerator
+import org.semanticweb.owlapi.model.OWLOntology
+import com.typesafe.scalalogging.LazyLogging
 
-object MaterializePropertyExpressions extends Command(description = "Materialize property expressions") {
+object MaterializePropertyExpressions extends Command(description = "Materialize property expressions") with LazyLogging {
 
   var ontologyFile = arg[File](name = "ontology")
   var outputFile = arg[File](name = "outfile")
@@ -34,18 +36,13 @@ object MaterializePropertyExpressions extends Command(description = "Materialize
     val manager = OWLManager.createOWLOntologyManager()
     val factory = manager.getOWLDataFactory
     val ontology = manager.loadOntologyFromOntologyDocument(ontologyFile)
-    val properties = ontology.getObjectPropertiesInSignature(Imports.INCLUDED).asScala
-    val classes = ontology.getClassesInSignature(Imports.INCLUDED).asScala
-    val axioms = for {
-      property <- properties
-      cls <- classes
-      axiom <- createAxioms(property, cls)
-    } yield axiom
+    val properties = ontology.getObjectPropertiesInSignature(Imports.INCLUDED).asScala.toSet
+    val classes = ontology.getClassesInSignature(Imports.INCLUDED).asScala.toSet
+    val axioms = properties.flatMap { property =>
+      logger.info(s"Processing property: $property")
+      inferAxioms(classes.flatMap(createAxioms(property, _)), ontology)
+    }
     val expressionsOntology = manager.createOntology(axioms.asJava, IRI.create(s"$prefix/expressions"))
-    manager.applyChange(new AddImport(expressionsOntology, factory.getOWLImportsDeclaration(ontology.getOntologyID.getOntologyIRI.get)))
-    val reasoner = new ElkReasonerFactory().createReasoner(expressionsOntology)
-    val generator = new InferredOntologyGenerator(reasoner, List[InferredAxiomGenerator[_ <: OWLAxiom]](new InferredSubClassAxiomGenerator(), new InferredEquivalentClassAxiomGenerator()).asJava)
-    generator.fillOntology(factory, expressionsOntology)
     manager.saveOntology(expressionsOntology, new RioTurtleDocumentFormat(), IRI.create(outputFile))
   }
 
@@ -55,6 +52,20 @@ object MaterializePropertyExpressions extends Command(description = "Materialize
       namedPropertyExpression Annotation (onProperty, property),
       namedPropertyExpression Annotation (someValuesFrom, cls),
       namedPropertyExpression EquivalentTo (property some cls))
+  }
+
+  def inferAxioms(startAxioms: Set[OWLAxiom], ontology: OWLOntology): Set[OWLAxiom] = {
+    val manager = ontology.getOWLOntologyManager
+    val factory = manager.getOWLDataFactory
+    val expressionsOntology = manager.createOntology(startAxioms.asJava)
+    manager.applyChange(new AddImport(expressionsOntology, factory.getOWLImportsDeclaration(ontology.getOntologyID.getOntologyIRI.get)))
+    val reasoner = new ElkReasonerFactory().createReasoner(expressionsOntology)
+    val generator = new InferredOntologyGenerator(reasoner, List[InferredAxiomGenerator[_ <: OWLAxiom]](new InferredSubClassAxiomGenerator(), new InferredEquivalentClassAxiomGenerator()).asJava)
+    generator.fillOntology(factory, expressionsOntology)
+    reasoner.dispose()
+    val newAxioms = expressionsOntology.getAxioms(Imports.EXCLUDED).asScala.toSet
+    manager.removeOntology(expressionsOntology)
+    newAxioms
   }
 
 }
