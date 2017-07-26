@@ -39,51 +39,53 @@ object MaterializePropertyExpressions extends Command(description = "Materialize
     val classes = ontology.getClassesInSignature(Imports.INCLUDED).asScala.toSet
     val axioms = properties.flatMap { property =>
       logger.info(s"Processing property: $property")
-      val propertyAxioms = classes.flatMap(createAxioms(property, _))
-      val inferredAxioms = inferAxioms(propertyAxioms, ontology)
+      val (propertyAxioms, mappings) = classes.map(createAxiom(property, _)).unzip
+      val clsToRestriction = mappings.toMap
+      val inferredAxioms = inferAxioms(propertyAxioms, ontology, clsToRestriction)
       propertyAxioms ++ inferredAxioms
     }
-    val assertedAxioms = ontology.getAxioms().asScala.map(_.getAxiomWithoutAnnotations)
-    val newAxioms = axioms -- assertedAxioms
-    val expressionsOntology = manager.createOntology(newAxioms.asJava, IRI.create(s"$prefix/expressions"))
+    //val assertedAxioms = ontology.getAxioms().asScala.map(_.getAxiomWithoutAnnotations)
+    //val newAxioms = axioms -- assertedAxioms
+    val expressionsOntology = manager.createOntology(axioms.asJava, IRI.create(s"$prefix/expressions"))
     manager.saveOntology(expressionsOntology, new RioTurtleDocumentFormat(), IRI.create(outputFile))
   }
 
-  def createAxioms(property: OWLObjectProperty, cls: OWLClass): Set[OWLAxiom] = {
+  def createAxiom(property: OWLObjectProperty, cls: OWLClass): (OWLAxiom, (OWLClass, Restriction)) = {
     val namedPropertyExpression = Class(s"$prefix/expression/${UUID.randomUUID}")
-    Set(
-      namedPropertyExpression Annotation (onProperty, property),
-      namedPropertyExpression Annotation (someValuesFrom, cls),
-      namedPropertyExpression EquivalentTo (property some cls))
+    (namedPropertyExpression EquivalentTo (property some cls), namedPropertyExpression -> Restriction(property, cls))
   }
 
-  def inferAxioms(startAxioms: Set[OWLAxiom], ontology: OWLOntology): Set[OWLAxiom] = {
+  def inferAxioms(startAxioms: Set[OWLAxiom], ontology: OWLOntology, mappings: Map[OWLClass, Restriction]): Set[OWLAxiom] = {
     val manager = ontology.getOWLOntologyManager
     val factory = manager.getOWLDataFactory
     val expressionsOntology = manager.createOntology(startAxioms.asJava)
     manager.applyChange(new AddImport(expressionsOntology, factory.getOWLImportsDeclaration(ontology.getOntologyID.getOntologyIRI.get)))
     val reasoner = new ElkReasonerFactory().createReasoner(expressionsOntology)
-    val newAxioms = traverse(List(reasoner.getTopClassNode), reasoner, Set.empty, Set.empty)
+    val newAxioms = traverse(List(reasoner.getTopClassNode), reasoner, Set.empty, Set.empty, mappings)
     reasoner.dispose()
     manager.removeOntology(expressionsOntology)
     newAxioms
   }
 
   @tailrec
-  def traverse(nodes: List[Node[OWLClass]], reasoner: OWLReasoner, acc: Set[OWLAxiom], traversed: Set[Node[OWLClass]]): Set[OWLAxiom] = nodes match {
+  def traverse(nodes: List[Node[OWLClass]], reasoner: OWLReasoner, acc: Set[OWLAxiom], traversed: Set[Node[OWLClass]], mappings: Map[OWLClass, Restriction]): Set[OWLAxiom] = nodes match {
     case Nil                               => acc
-    case node :: rest if traversed(node)   => traverse(rest, reasoner, acc, traversed)
-    case node :: rest if node.isBottomNode => traverse(rest, reasoner, acc, traversed + node)
+    case node :: rest if traversed(node)   => traverse(rest, reasoner, acc, traversed, mappings)
+    case node :: rest if node.isBottomNode => traverse(rest, reasoner, acc, traversed + node, mappings)
     case node :: rest =>
       val subclassNodes = reasoner.getSubClasses(node.getRepresentativeElement, true)
       val superclasses = node.getEntities.asScala
       val subclasses = subclassNodes.getFlattened.asScala
       val axioms = for {
         superclass <- superclasses
+        if mappings.contains(superclass)
         subclass <- subclasses
+        if !mappings.contains(subclass)
         if (!subclass.isOWLNothing)
-      } yield (subclass SubClassOf superclass)
-      traverse(subclassNodes.getNodes.asScala.toList ::: rest, reasoner, acc ++ axioms, traversed + node)
+      } yield (subclass Annotation (AnnotationProperty(mappings(superclass).property.getIRI), mappings(superclass).filler))
+      traverse(subclassNodes.getNodes.asScala.toList ::: rest, reasoner, acc ++ axioms, traversed + node, mappings)
   }
+
+  case class Restriction(property: OWLObjectProperty, filler: OWLClass)
 
 }
