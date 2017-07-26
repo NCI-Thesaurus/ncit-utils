@@ -41,8 +41,7 @@ object MaterializePropertyExpressions extends Command(description = "Materialize
       logger.info(s"Processing property: $property")
       val (propertyAxioms, mappings) = classes.map(createAxiom(property, _)).unzip
       val clsToRestriction = mappings.toMap
-      val inferredAxioms = inferAxioms(propertyAxioms, ontology, clsToRestriction)
-      propertyAxioms ++ inferredAxioms
+      inferAxioms(propertyAxioms, ontology, clsToRestriction)
     }
     //val assertedAxioms = ontology.getAxioms().asScala.map(_.getAxiomWithoutAnnotations)
     //val newAxioms = axioms -- assertedAxioms
