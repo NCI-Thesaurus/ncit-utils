@@ -34,7 +34,6 @@ object MaterializePropertyExpressions extends Command(description = "Materialize
 
   def run(): Unit = {
     val manager = OWLManager.createOWLOntologyManager()
-    val factory = manager.getOWLDataFactory
     val ontology = manager.loadOntologyFromOntologyDocument(ontologyFile)
     val properties = ontology.getObjectPropertiesInSignature(Imports.INCLUDED).asScala.toSet
     val classes = ontology.getClassesInSignature(Imports.INCLUDED).asScala.toSet
@@ -44,7 +43,8 @@ object MaterializePropertyExpressions extends Command(description = "Materialize
       val inferredAxioms = inferAxioms(propertyAxioms, ontology)
       propertyAxioms ++ inferredAxioms
     }
-    val newAxioms = axioms.filterNot(ontology.containsAxiomIgnoreAnnotations(_))
+    val assertedAxioms = ontology.getAxioms().asScala.map(_.getAxiomWithoutAnnotations)
+    val newAxioms = axioms -- assertedAxioms
     val expressionsOntology = manager.createOntology(newAxioms.asJava, IRI.create(s"$prefix/expressions"))
     manager.saveOntology(expressionsOntology, new RioTurtleDocumentFormat(), IRI.create(outputFile))
   }
