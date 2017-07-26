@@ -63,19 +63,17 @@ object MaterializePropertyExpressions extends Command(description = "Materialize
     val expressionsOntology = manager.createOntology(startAxioms.asJava)
     manager.applyChange(new AddImport(expressionsOntology, factory.getOWLImportsDeclaration(ontology.getOntologyID.getOntologyIRI.get)))
     val reasoner = new ElkReasonerFactory().createReasoner(expressionsOntology)
-    //    val generator = new InferredOntologyGenerator(reasoner, List[InferredAxiomGenerator[_ <: OWLAxiom]](new InferredSubClassAxiomGenerator(), new InferredEquivalentClassAxiomGenerator()).asJava)
-    val newAxioms = traverse(List(reasoner.getTopClassNode), reasoner, Set.empty)
-    //generator.fillOntology(factory, expressionsOntology)
+    val newAxioms = traverse(List(reasoner.getTopClassNode), reasoner, Set.empty, Set.empty)
     reasoner.dispose()
-    //val newAxioms = expressionsOntology.getAxioms(Imports.EXCLUDED).asScala.toSet
     manager.removeOntology(expressionsOntology)
     newAxioms
   }
 
   @tailrec
-  def traverse(nodes: List[Node[OWLClass]], reasoner: OWLReasoner, acc: Set[OWLAxiom]): Set[OWLAxiom] = nodes match {
+  def traverse(nodes: List[Node[OWLClass]], reasoner: OWLReasoner, acc: Set[OWLAxiom], traversed: Set[Node[OWLClass]]): Set[OWLAxiom] = nodes match {
     case Nil                               => acc
-    case node :: rest if node.isBottomNode => traverse(rest, reasoner, acc)
+    case node :: rest if traversed(node)   => traverse(rest, reasoner, acc, traversed)
+    case node :: rest if node.isBottomNode => traverse(rest, reasoner, acc, traversed + node)
     case node :: rest =>
       val subclassNodes = reasoner.getSubClasses(node.getRepresentativeElement, true)
       val superclasses = node.getEntities.asScala
@@ -85,7 +83,7 @@ object MaterializePropertyExpressions extends Command(description = "Materialize
         subclass <- subclasses
         if (!subclass.isOWLNothing)
       } yield (subclass SubClassOf superclass)
-      traverse(subclassNodes.getNodes.asScala.toList ::: rest, reasoner, acc ++ axioms)
+      traverse(subclassNodes.getNodes.asScala.toList ::: rest, reasoner, acc ++ axioms, traversed + node)
   }
 
 }
