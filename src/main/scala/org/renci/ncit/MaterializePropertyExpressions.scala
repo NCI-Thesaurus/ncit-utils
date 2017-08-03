@@ -43,8 +43,6 @@ object MaterializePropertyExpressions extends Command(description = "Materialize
       val clsToRestriction = mappings.toMap
       inferAxioms(propertyAxioms, ontology, clsToRestriction)
     }
-    //val assertedAxioms = ontology.getAxioms().asScala.map(_.getAxiomWithoutAnnotations)
-    //val newAxioms = axioms -- assertedAxioms
     val expressionsOntology = manager.createOntology(axioms.asJava, IRI.create(s"$prefix/expressions"))
     manager.saveOntology(expressionsOntology, new RioTurtleDocumentFormat(), IRI.create(outputFile))
   }
