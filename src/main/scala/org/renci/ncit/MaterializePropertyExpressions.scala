@@ -64,6 +64,9 @@ object MaterializePropertyExpressions extends Command(description = "Materialize
     newAxioms
   }
 
+  /**
+   * This is similar to InferredSubClassAxiomGenerator in OWL API, but much more efficient
+   */
   @tailrec
   def traverse(nodes: List[Node[OWLClass]], reasoner: OWLReasoner, acc: Set[OWLAxiom], traversed: Set[Node[OWLClass]], mappings: Map[OWLClass, Restriction]): Set[OWLAxiom] = nodes match {
     case Nil                               => acc
