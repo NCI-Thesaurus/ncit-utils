@@ -11,13 +11,11 @@ import org.phenoscape.scowl._
 import org.semanticweb.elk.owlapi.ElkReasonerFactory
 import org.semanticweb.owlapi.apibinding.OWLManager
 import org.semanticweb.owlapi.formats.RioTurtleDocumentFormat
-import org.semanticweb.owlapi.model.AddImport
 import org.semanticweb.owlapi.model.AddOntologyAnnotation
 import org.semanticweb.owlapi.model.IRI
 import org.semanticweb.owlapi.model.OWLAxiom
 import org.semanticweb.owlapi.model.OWLClass
 import org.semanticweb.owlapi.model.OWLObjectProperty
-import org.semanticweb.owlapi.model.OWLOntology
 import org.semanticweb.owlapi.model.parameters.Imports
 import org.semanticweb.owlapi.reasoner.Node
 import org.semanticweb.owlapi.reasoner.OWLReasoner
@@ -32,15 +30,16 @@ object MaterializePropertyExpressions extends Command(description = "Materialize
   val prefix = "http://github.com/NCI-Thesaurus/thesaurus-obo-edition"
 
   def run(): Unit = {
-    val manager = OWLManager.createConcurrentOWLOntologyManager()
+    val manager = OWLManager.createOWLOntologyManager()
     val ontology = manager.loadOntologyFromOntologyDocument(ontologyFile)
     val properties = ontology.getObjectPropertiesInSignature(Imports.INCLUDED).asScala.toSet
     val classes = ontology.getClassesInSignature(Imports.INCLUDED).asScala.toSet
+    val ontologyAxioms = ontology.getAxioms(Imports.INCLUDED).asScala
     val axioms = properties.par.flatMap { property =>
       logger.info(s"Processing property: $property")
       val (propertyAxioms, mappings) = classes.map(createAxiom(property, _)).unzip
       val clsToRestriction = mappings.toMap
-      inferAxioms(propertyAxioms, ontology, clsToRestriction)
+      inferAxioms(propertyAxioms ++ ontologyAxioms, clsToRestriction)
     }.seq
     val expressionsOntology = manager.createOntology(axioms.asJava, IRI.create(s"$prefix/property-graph"))
     new AddOntologyAnnotation(expressionsOntology, Annotation(RDFSComment, """This graph provides direct property relationships between classes to support more convenient querying of existential property restrictions. These relationships are derived from the OWL semantics of the main ontology, but are not compatible from an OWL perspective."""))
@@ -52,11 +51,10 @@ object MaterializePropertyExpressions extends Command(description = "Materialize
     (namedPropertyExpression EquivalentTo (property some cls), namedPropertyExpression -> Restriction(property, cls))
   }
 
-  def inferAxioms(startAxioms: Set[OWLAxiom], ontology: OWLOntology, mappings: Map[OWLClass, Restriction]): Set[OWLAxiom] = {
-    val manager = ontology.getOWLOntologyManager
+  def inferAxioms(startAxioms: Set[OWLAxiom], mappings: Map[OWLClass, Restriction]): Set[OWLAxiom] = {
+    val manager = OWLManager.createOWLOntologyManager()
     val factory = manager.getOWLDataFactory
     val expressionsOntology = manager.createOntology(startAxioms.asJava)
-    manager.applyChange(new AddImport(expressionsOntology, factory.getOWLImportsDeclaration(ontology.getOntologyID.getOntologyIRI.get)))
     val reasoner = new ElkReasonerFactory().createReasoner(expressionsOntology)
     val newAxioms = traverse(List(reasoner.getTopClassNode), reasoner, Set.empty, Set.empty, mappings)
     reasoner.dispose()
