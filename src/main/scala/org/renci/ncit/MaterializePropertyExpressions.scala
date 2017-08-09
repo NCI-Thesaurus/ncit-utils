@@ -12,6 +12,7 @@ import org.semanticweb.elk.owlapi.ElkReasonerFactory
 import org.semanticweb.owlapi.apibinding.OWLManager
 import org.semanticweb.owlapi.formats.RioTurtleDocumentFormat
 import org.semanticweb.owlapi.model.AddImport
+import org.semanticweb.owlapi.model.AddOntologyAnnotation
 import org.semanticweb.owlapi.model.IRI
 import org.semanticweb.owlapi.model.OWLAxiom
 import org.semanticweb.owlapi.model.OWLClass
@@ -29,8 +30,6 @@ object MaterializePropertyExpressions extends Command(description = "Materialize
   var outputFile = arg[File](name = "outfile")
 
   val prefix = "http://github.com/NCI-Thesaurus/thesaurus-obo-edition"
-  val onProperty = AnnotationProperty(s"$prefix/onProperty")
-  val someValuesFrom = AnnotationProperty(s"$prefix/someValuesFrom")
 
   def run(): Unit = {
     val manager = OWLManager.createOWLOntologyManager()
@@ -43,7 +42,8 @@ object MaterializePropertyExpressions extends Command(description = "Materialize
       val clsToRestriction = mappings.toMap
       inferAxioms(propertyAxioms, ontology, clsToRestriction)
     }
-    val expressionsOntology = manager.createOntology(axioms.asJava, IRI.create(s"$prefix/expressions"))
+    val expressionsOntology = manager.createOntology(axioms.asJava, IRI.create(s"$prefix/property-graph"))
+    new AddOntologyAnnotation(expressionsOntology, Annotation(RDFSComment, "This graph provides direct property relationships between classes to support more convenient querying of existential property restrictions. These relationships are derived from the OWL semantics of the main ontology, but are not compatible from an OWL perspective."))
     manager.saveOntology(expressionsOntology, new RioTurtleDocumentFormat(), IRI.create(outputFile))
   }
 
