@@ -4,7 +4,7 @@ organization  := "org.renci"
 
 name          := "ncit-utils"
 
-version       := "0.3.1"
+version       := "0.4"
 
 licenses := Seq("BSD-3-Clause" -> url("https://opensource.org/licenses/BSD-3-Clause"))
 
@@ -27,6 +27,7 @@ libraryDependencies ++= {
     "org.semanticweb.elk"         %  "elk-owlapi"             % "0.4.3",
     "org.backuity.clist"          %% "clist-core"             % "3.2.2",
     "org.backuity.clist"          %% "clist-macros"           % "3.2.2" % "provided",
+    "com.github.pathikrit"        %% "better-files"           % "3.1.0",
     "com.typesafe.scala-logging"  %% "scala-logging"          % "3.7.1",
     "ch.qos.logback"              %  "logback-classic"        % "1.2.3",
     "org.codehaus.groovy"         %  "groovy-all"             % "2.4.6"

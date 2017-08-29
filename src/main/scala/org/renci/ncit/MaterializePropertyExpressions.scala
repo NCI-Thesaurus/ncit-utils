@@ -24,7 +24,7 @@ import org.semanticweb.owlapi.reasoner.OWLReasoner
 
 import com.typesafe.scalalogging.LazyLogging
 
-object MaterializePropertyExpressions extends Command(description = "Materialize property expressions") with LazyLogging {
+object MaterializePropertyExpressions extends Command(description = "Materialize property expressions") with Common with LazyLogging {
 
   var ontologyFile = arg[File](name = "ontology")
   var nonRedundantOutputFile = arg[File](name = "nonredundant")
@@ -32,7 +32,7 @@ object MaterializePropertyExpressions extends Command(description = "Materialize
 
   val prefix = "http://github.com/NCI-Thesaurus/thesaurus-obo-edition"
 
-  def run(): Unit = {
+  override def run(): Unit = {
     val manager = OWLManager.createOWLOntologyManager()
     val ontology = manager.loadOntologyFromOntologyDocument(ontologyFile)
     val properties = ontology.getObjectPropertiesInSignature(Imports.INCLUDED).asScala.toSet
