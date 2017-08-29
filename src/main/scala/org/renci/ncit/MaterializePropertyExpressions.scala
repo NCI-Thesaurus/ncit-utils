@@ -44,10 +44,12 @@ object MaterializePropertyExpressions extends Command(description = "Materialize
       inferAxioms(propertyAxioms, ontology, clsToRestriction)
     }.unzip
     val nonRedundantPropertiesOnt = manager.createOntology(newNonRedundantAxioms.flatten.asJava, IRI.create(s"$prefix/property-graph"))
-    new AddOntologyAnnotation(nonRedundantPropertiesOnt, Annotation(RDFSComment, "This graph provides direct property relationships between classes to support more convenient querying of existential property restrictions. These relationships are derived from the OWL semantics of the main ontology, but are not compatible from an OWL perspective."))
+    manager.applyChange(
+      new AddOntologyAnnotation(nonRedundantPropertiesOnt, Annotation(RDFSComment, "This graph provides direct property relationships between classes to support more convenient querying of existential property restrictions. These relationships are derived from the OWL semantics of the main ontology, but are not compatible from an OWL perspective.")))
     manager.saveOntology(nonRedundantPropertiesOnt, new RioTurtleDocumentFormat(), IRI.create(nonRedundantOutputFile))
     val redundantPropertiesOnt = manager.createOntology(newRedundantAxioms.flatten.asJava, IRI.create(s"$prefix/property-graph-redundant"))
-    new AddOntologyAnnotation(redundantPropertiesOnt, Annotation(RDFSComment, "This graph provides direct property relationships between classes to support more convenient querying of existential property restrictions. These relationships are derived from the OWL semantics of the main ontology, but are not compatible from an OWL perspective."))
+    manager.applyChange(
+      new AddOntologyAnnotation(redundantPropertiesOnt, Annotation(RDFSComment, "This graph provides direct property relationships between classes to support more convenient querying of existential property restrictions. These relationships are derived from the OWL semantics of the main ontology, but are not compatible from an OWL perspective.")))
     manager.saveOntology(redundantPropertiesOnt, new RioTurtleDocumentFormat(), IRI.create(redundantOutputFile))
   }
 
