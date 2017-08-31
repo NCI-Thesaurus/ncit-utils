@@ -57,7 +57,7 @@ object ReplaceMappedTerms extends Command(description = "Replace mapped terms") 
     } yield new RemoveAxiom(ont, ax)
     val equivalenceRemovals = for {
       ax @ EquivalentClasses(_, classes) <- ont.getAxioms().asScala
-      if classes.collectFirst { case c @ Class(_) => newTerms(c) }.nonEmpty
+      if classes.collectFirst { case c @ Class(_) if newTerms(c) => c }.nonEmpty
     } yield new RemoveAxiom(ont, ax)
     manager.applyChanges((hierarchyRemovals ++ equivalenceRemovals).toList.asJava)
     manager.saveOntology(ont, IRI.create(outputFile))
