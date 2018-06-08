@@ -35,19 +35,20 @@ object MaterializePropertyExpressions extends Command(description = "Materialize
   override def run(): Unit = {
     val manager = OWLManager.createOWLOntologyManager()
     val ontology = manager.loadOntologyFromOntologyDocument(ontologyFile)
+    val assertedAxioms = ontology.getAxioms(Imports.INCLUDED).asScala.toSet
     val properties = ontology.getObjectPropertiesInSignature(Imports.INCLUDED).asScala.toSet
     val classes = ontology.getClassesInSignature(Imports.INCLUDED).asScala.toSet
-    val (newNonRedundantAxioms, newRedundantAxioms) = properties.map { property =>
+    val (newNonRedundantAxioms, newRedundantAxioms) = properties.par.map { property =>
       logger.info(s"Processing property: $property")
       val (propertyAxioms, mappings) = classes.map(createAxiom(property, _)).unzip
       val clsToRestriction = mappings.toMap
-      inferAxioms(propertyAxioms, ontology, clsToRestriction)
+      inferAxioms(propertyAxioms, assertedAxioms, clsToRestriction)
     }.unzip
-    val nonRedundantPropertiesOnt = manager.createOntology(newNonRedundantAxioms.flatten.asJava, IRI.create(s"$prefix/property-graph"))
+    val nonRedundantPropertiesOnt = manager.createOntology(newNonRedundantAxioms.flatten.seq.asJava, IRI.create(s"$prefix/property-graph"))
     manager.applyChange(
       new AddOntologyAnnotation(nonRedundantPropertiesOnt, Annotation(RDFSComment, "This graph provides direct property relationships between classes to support more convenient querying of existential property restrictions. These relationships are derived from the OWL semantics of the main ontology, but are not compatible from an OWL perspective.")))
     manager.saveOntology(nonRedundantPropertiesOnt, new RioTurtleDocumentFormat(), IRI.create(nonRedundantOutputFile))
-    val redundantPropertiesOnt = manager.createOntology(newRedundantAxioms.flatten.asJava, IRI.create(s"$prefix/property-graph-redundant"))
+    val redundantPropertiesOnt = manager.createOntology(newRedundantAxioms.flatten.seq.asJava, IRI.create(s"$prefix/property-graph-redundant"))
     manager.applyChange(
       new AddOntologyAnnotation(redundantPropertiesOnt, Annotation(RDFSComment, "This graph provides direct property relationships between classes to support more convenient querying of existential property restrictions. These relationships are derived from the OWL semantics of the main ontology, but are not compatible from an OWL perspective.")))
     manager.saveOntology(redundantPropertiesOnt, new RioTurtleDocumentFormat(), IRI.create(redundantOutputFile))
@@ -58,12 +59,13 @@ object MaterializePropertyExpressions extends Command(description = "Materialize
     (namedPropertyExpression EquivalentTo (property some cls), namedPropertyExpression -> Restriction(property, cls))
   }
 
-  def inferAxioms(startAxioms: Set[OWLAxiom], ontology: OWLOntology, mappings: Map[OWLClass, Restriction]): (Set[OWLAxiom], Set[OWLAxiom]) = {
-    val manager = ontology.getOWLOntologyManager
+  def inferAxioms(startAxioms: Set[OWLAxiom], assertedAxioms: Set[OWLAxiom], mappings: Map[OWLClass, Restriction]): (Set[OWLAxiom], Set[OWLAxiom]) = {
+    val manager = OWLManager.createOWLOntologyManager()
     val factory = manager.getOWLDataFactory
-    val expressionsOntology = manager.createOntology(startAxioms.asJava)
-    manager.applyChange(new AddImport(expressionsOntology, factory.getOWLImportsDeclaration(ontology.getOntologyID.getOntologyIRI.get)))
+    val expressionsOntology = manager.createOntology((startAxioms ++ assertedAxioms).asJava)
     val reasoner = new ElkReasonerFactory().createReasoner(expressionsOntology)
+    val unsatisfiableClassesCount = reasoner.getUnsatisfiableClasses.getEntitiesMinusBottom.size
+    if (unsatisfiableClassesCount > 0) logger.error(s"Ontology has $unsatisfiableClassesCount unsatisifiable classes. Proceeding anyway...")
     val (newNonRedundantAxioms, newRedundantAxioms) = traverse(List(reasoner.getTopClassNode), reasoner, Set.empty, Set.empty, Set.empty, mappings)
     reasoner.dispose()
     manager.removeOntology(expressionsOntology)
