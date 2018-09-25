@@ -29,7 +29,7 @@ object MaterializePropertyExpressions extends Command(description = "Materialize
     val classes = ontology.getClassesInSignature(Imports.INCLUDED).asScala.toSet - OWLThing - OWLNothing
     val whelkOntology = Bridge.ontologyToAxioms(ontology)
     val whelk = Reasoner.assert(whelkOntology)
-    val (nonRedundantAxioms, redundantAxioms) = properties.map { property =>
+    val (nonRedundantAxioms, redundantAxioms) = properties.par.map { property =>
       logger.info(s"Processing property: $property")
       val (propertyAxioms, mappings) = classes.map(createAxiom(property, _)).unzip
       val clsToRestriction = mappings.toMap
@@ -38,7 +38,7 @@ object MaterializePropertyExpressions extends Command(description = "Materialize
       logger.info(s"Property classification done: $property")
       val taxonomy = updatedWhelk.computeTaxonomy
       logger.info(s"Parallel queries for: $property")
-      val (nonRedundantAxiomsForProp, redundantAxiomsForProp) = clsToRestriction.keys.par.map { cls =>
+      val (nonRedundantAxiomsForProp, redundantAxiomsForProp) = clsToRestriction.keys.map { cls =>
         val Restriction(_, thisTerm) = clsToRestriction(cls)
         val whelkCls = AtomicConcept(cls.getIRI.toString)
         val (_, directSuperclasses) = taxonomy.getOrElse(whelkCls, (Set.empty, Set.empty))
