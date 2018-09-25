@@ -81,26 +81,26 @@ object MaterializePropertyExpressions extends Command(description = "Materialize
     case node :: rest if traversed(node)   => traverse(rest, reasoner, nonRedundantAcc, redundantAcc, traversed, mappings)
     case node :: rest if node.isBottomNode => traverse(rest, reasoner, nonRedundantAcc, redundantAcc, traversed + node, mappings)
     case node :: rest =>
-      val directSubclassNodes = reasoner.getSubClasses(node.getRepresentativeElement, true)
-      val allSubclassNodes = reasoner.getSubClasses(node.getRepresentativeElement, false)
+      val directSubclassNodes = reasoner.getSubClasses(node.getRepresentativeElement, true).asScala.filterNot(_.isBottomNode)
+      val allSubclassNodes = reasoner.getSubClasses(node.getRepresentativeElement, false).asScala.filterNot(_.isBottomNode)
       val superclasses = node.getEntities.asScala
-      val directSubclasses = directSubclassNodes.getFlattened.asScala
-      val allSubclasses = allSubclassNodes.getFlattened.asScala
+      val directSubclasses = directSubclassNodes.flatMap(_.getEntities.asScala)
+      val allSubclasses = allSubclassNodes.flatMap(_.getEntities.asScala)
       val nonRedundantAxioms = for {
         superclass <- superclasses
         if mappings.contains(superclass)
         subclass <- directSubclasses
         if !mappings.contains(subclass)
-        if (!subclass.isOWLNothing)
-      } yield (subclass Annotation (AnnotationProperty(mappings(superclass).property.getIRI), mappings(superclass).filler))
+        if !subclass.isOWLNothing
+      } yield subclass Annotation (AnnotationProperty(mappings(superclass).property.getIRI), mappings(superclass).filler)
       val redundantAxioms = for {
         superclass <- superclasses
         if mappings.contains(superclass)
         subclass <- allSubclasses
         if !mappings.contains(subclass)
-        if (!subclass.isOWLNothing)
-      } yield (subclass Annotation (AnnotationProperty(mappings(superclass).property.getIRI), mappings(superclass).filler))
-      traverse(directSubclassNodes.getNodes.asScala.toList ::: rest, reasoner, nonRedundantAcc ++ nonRedundantAxioms, redundantAcc ++ redundantAxioms, traversed + node, mappings)
+        if !subclass.isOWLNothing
+      } yield subclass Annotation (AnnotationProperty(mappings(superclass).property.getIRI), mappings(superclass).filler)
+      traverse(directSubclassNodes.toList ::: rest, reasoner, nonRedundantAcc ++ nonRedundantAxioms, redundantAcc ++ redundantAxioms, traversed + node, mappings)
   }
 
   case class Restriction(property: OWLObjectProperty, filler: OWLClass)
