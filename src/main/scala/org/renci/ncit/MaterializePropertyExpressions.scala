@@ -35,7 +35,9 @@ object MaterializePropertyExpressions extends Command(description = "Materialize
       val clsToRestriction = mappings.toMap
       val newAxioms = propertyAxioms.flatMap(Bridge.convertAxiom).collect { case x: ConceptInclusion => x }
       val updatedWhelk = Reasoner.assert(newAxioms, whelk)
+      logger.info(s"Property classification done: $property")
       val taxonomy = updatedWhelk.computeTaxonomy
+      logger.info(s"Parallel queries for: $property")
       val (nonRedundantAxiomsForProp, redundantAxiomsForProp) = clsToRestriction.keys.par.map { cls =>
         val Restriction(_, thisTerm) = clsToRestriction(cls)
         val whelkCls = AtomicConcept(cls.getIRI.toString)
