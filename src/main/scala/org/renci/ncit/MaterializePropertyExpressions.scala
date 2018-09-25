@@ -3,26 +3,18 @@ package org.renci.ncit
 import java.io.File
 import java.util.UUID
 
-import scala.annotation.tailrec
-import scala.collection.JavaConverters._
-
+import com.typesafe.scalalogging.LazyLogging
 import org.backuity.clist._
 import org.phenoscape.scowl._
 import org.semanticweb.elk.owlapi.ElkReasonerFactory
 import org.semanticweb.owlapi.apibinding.OWLManager
 import org.semanticweb.owlapi.formats.RioTurtleDocumentFormat
-import org.semanticweb.owlapi.model.AddImport
-import org.semanticweb.owlapi.model.AddOntologyAnnotation
-import org.semanticweb.owlapi.model.IRI
-import org.semanticweb.owlapi.model.OWLAxiom
-import org.semanticweb.owlapi.model.OWLClass
-import org.semanticweb.owlapi.model.OWLObjectProperty
-import org.semanticweb.owlapi.model.OWLOntology
+import org.semanticweb.owlapi.model._
 import org.semanticweb.owlapi.model.parameters.Imports
-import org.semanticweb.owlapi.reasoner.Node
-import org.semanticweb.owlapi.reasoner.OWLReasoner
+import org.semanticweb.owlapi.reasoner.{Node, OWLReasoner}
 
-import com.typesafe.scalalogging.LazyLogging
+import scala.annotation.tailrec
+import scala.collection.JavaConverters._
 
 object MaterializePropertyExpressions extends Command(description = "Materialize property expressions") with Common with LazyLogging {
 
