@@ -26,6 +26,7 @@ libraryDependencies ++= {
     "net.sourceforge.owlapi"      %  "owlapi-distribution"    % "4.3.1",
     "org.semanticweb.elk"         %  "elk-owlapi"             % "0.4.3",
     "org.geneontology"            %% "whelk"                  % "0.1.3",
+    "io.monix"                    %% "monix"                  % "3.0.0-RC1",
     "org.backuity.clist"          %% "clist-core"             % "3.2.2",
     "org.backuity.clist"          %% "clist-macros"           % "3.2.2" % "provided",
     "com.github.pathikrit"        %% "better-files"           % "3.1.0",
