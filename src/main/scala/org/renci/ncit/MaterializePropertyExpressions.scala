@@ -44,7 +44,7 @@ object MaterializePropertyExpressions extends Command(description = "Materialize
       property <- Observable.fromIterable(properties)
       cls <- Observable.fromIterable(classes)
     } yield Restriction(property, cls)
-    val processed = restrictions.mapParallelUnordered(Runtime.getRuntime().availableProcessors) { case Restriction(property, cls) =>
+    val processed = restrictions.mapParallelUnordered(Runtime.getRuntime.availableProcessors) { case Restriction(property, cls) =>
       Task {
         val propertyID = property.getIRI.toString
         val clsID = cls.getIRI.toString
@@ -55,7 +55,7 @@ object MaterializePropertyExpressions extends Command(description = "Materialize
         val predicate = NodeFactory.createURI(property.getIRI.toString)
         val target = NodeFactory.createURI(cls.getIRI.toString)
         val (equivalents, directSubclasses) = updatedWhelk.directlySubsumes(queryConcept)
-        val subclasses = updatedWhelk.closureSubsBySuperclass(queryConcept).collect { case (x: AtomicConcept) => x } - queryConcept - BuiltIn.Bottom
+        val subclasses = updatedWhelk.closureSubsBySuperclass(queryConcept).collect { case x: AtomicConcept => x } - queryConcept - BuiltIn.Bottom
         if (!equivalents(BuiltIn.Bottom)) {
           val nonredundantAxioms = (directSubclasses - BuiltIn.Bottom ++ equivalents).map(sc => Triple.create(NodeFactory.createURI(sc.id), predicate, target))
           val redundantAxioms = subclasses.map(sc => Triple.create(NodeFactory.createURI(sc.id), predicate, target))
