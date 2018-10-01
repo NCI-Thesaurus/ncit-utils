@@ -3,21 +3,16 @@ package org.renci.ncit
 import java.nio.charset.StandardCharsets
 import java.util.Collections
 
-import scala.collection.JavaConverters._
-
+import better.files._
+import com.typesafe.scalalogging.LazyLogging
 import org.backuity.clist._
 import org.phenoscape.scowl._
 import org.semanticweb.owlapi.apibinding.OWLManager
-import org.semanticweb.owlapi.model.AddAxiom
-import org.semanticweb.owlapi.model.IRI
-import org.semanticweb.owlapi.model.OWLLiteral
-import org.semanticweb.owlapi.model.RemoveAxiom
+import org.semanticweb.owlapi.model.{AddAxiom, IRI, OWLLiteral, RemoveAxiom}
 import org.semanticweb.owlapi.search.EntitySearcher
 import org.semanticweb.owlapi.util.OWLEntityRenamer
 
-import com.typesafe.scalalogging.LazyLogging
-
-import better.files._
+import scala.collection.JavaConverters._
 
 object ReplaceMappedTerms extends Command(description = "Replace mapped terms") with Common with LazyLogging {
 

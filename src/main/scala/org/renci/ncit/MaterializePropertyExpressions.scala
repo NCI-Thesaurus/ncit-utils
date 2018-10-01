@@ -1,28 +1,23 @@
 package org.renci.ncit
 
-import java.io.File
-import java.util.UUID
-
-import scala.annotation.tailrec
-import scala.collection.JavaConverters._
-
-import org.backuity.clist._
-import org.phenoscape.scowl._
-import org.semanticweb.elk.owlapi.ElkReasonerFactory
-import org.semanticweb.owlapi.apibinding.OWLManager
-import org.semanticweb.owlapi.formats.RioTurtleDocumentFormat
-import org.semanticweb.owlapi.model.AddImport
-import org.semanticweb.owlapi.model.AddOntologyAnnotation
-import org.semanticweb.owlapi.model.IRI
-import org.semanticweb.owlapi.model.OWLAxiom
-import org.semanticweb.owlapi.model.OWLClass
-import org.semanticweb.owlapi.model.OWLObjectProperty
-import org.semanticweb.owlapi.model.OWLOntology
-import org.semanticweb.owlapi.model.parameters.Imports
-import org.semanticweb.owlapi.reasoner.Node
-import org.semanticweb.owlapi.reasoner.OWLReasoner
+import java.io.{File, FileOutputStream}
 
 import com.typesafe.scalalogging.LazyLogging
+import monix.eval._
+import monix.execution.Scheduler.Implicits.global
+import monix.reactive._
+import org.apache.jena.graph.{NodeFactory, Triple}
+import org.apache.jena.riot.RDFFormat
+import org.apache.jena.riot.system.StreamRDFWriter
+import org.backuity.clist._
+import org.geneontology.whelk._
+import org.phenoscape.scowl._
+import org.semanticweb.owlapi.apibinding.OWLManager
+import org.semanticweb.owlapi.model._
+import org.semanticweb.owlapi.model.parameters.Imports
+
+import scala.collection.JavaConverters._
+import scala.concurrent.duration.Duration
 
 object MaterializePropertyExpressions extends Command(description = "Materialize property expressions") with Common with LazyLogging {
 
@@ -30,77 +25,57 @@ object MaterializePropertyExpressions extends Command(description = "Materialize
   var nonRedundantOutputFile = arg[File](name = "nonredundant")
   var redundantOutputFile = arg[File](name = "redundant")
 
-  val prefix = "http://github.com/NCI-Thesaurus/thesaurus-obo-edition"
-
   override def run(): Unit = {
+    val nonredundantOutputStream = new FileOutputStream(nonRedundantOutputFile)
+    val nonredundantRDFWriter = StreamRDFWriter.getWriterStream(nonredundantOutputStream, RDFFormat.TURTLE_FLAT)
+    nonredundantRDFWriter.start()
+    val redundantOutputStream = new FileOutputStream(redundantOutputFile)
+    val redundantRDFWriter = StreamRDFWriter.getWriterStream(redundantOutputStream, RDFFormat.TURTLE_FLAT)
+    redundantRDFWriter.start()
     val manager = OWLManager.createOWLOntologyManager()
     val ontology = manager.loadOntologyFromOntologyDocument(ontologyFile)
-    val assertedAxioms = ontology.getAxioms(Imports.INCLUDED).asScala.toSet
-    val properties = ontology.getObjectPropertiesInSignature(Imports.INCLUDED).asScala.toSet
-    val classes = ontology.getClassesInSignature(Imports.INCLUDED).asScala.toSet
-    val (newNonRedundantAxioms, newRedundantAxioms) = properties.par.map { property =>
-      logger.info(s"Processing property: $property")
-      val (propertyAxioms, mappings) = classes.map(createAxiom(property, _)).unzip
-      val clsToRestriction = mappings.toMap
-      inferAxioms(propertyAxioms, assertedAxioms, clsToRestriction)
-    }.unzip
-    val nonRedundantPropertiesOnt = manager.createOntology(newNonRedundantAxioms.flatten.seq.asJava, IRI.create(s"$prefix/property-graph"))
-    manager.applyChange(
-      new AddOntologyAnnotation(nonRedundantPropertiesOnt, Annotation(RDFSComment, "This graph provides direct property relationships between classes to support more convenient querying of existential property restrictions. These relationships are derived from the OWL semantics of the main ontology, but are not compatible from an OWL perspective.")))
-    manager.saveOntology(nonRedundantPropertiesOnt, new RioTurtleDocumentFormat(), IRI.create(nonRedundantOutputFile))
-    val redundantPropertiesOnt = manager.createOntology(newRedundantAxioms.flatten.seq.asJava, IRI.create(s"$prefix/property-graph-redundant"))
-    manager.applyChange(
-      new AddOntologyAnnotation(redundantPropertiesOnt, Annotation(RDFSComment, "This graph provides direct property relationships between classes to support more convenient querying of existential property restrictions. These relationships are derived from the OWL semantics of the main ontology, but are not compatible from an OWL perspective.")))
-    manager.saveOntology(redundantPropertiesOnt, new RioTurtleDocumentFormat(), IRI.create(redundantOutputFile))
+    val whelkOntology = Bridge.ontologyToAxioms(ontology)
+    logger.info("Running reasoner")
+    val whelk = Reasoner.assert(whelkOntology)
+    logger.info("Done running reasoner")
+    val restrictions = extractAllRestrictions(ontology)
+    val processed = restrictions.mapParallelUnordered(Runtime.getRuntime.availableProcessors)(r => Task(processRestriction(r, whelk)))
+    processed.foreachL { case (nonredundant, redundant) =>
+      nonredundant.foreach(nonredundantRDFWriter.triple)
+      redundant.foreach(redundantRDFWriter.triple)
+    }.runSyncUnsafe(Duration.Inf)
+    nonredundantRDFWriter.finish()
+    nonredundantOutputStream.close()
+    redundantRDFWriter.finish()
+    redundantOutputStream.close()
   }
 
-  def createAxiom(property: OWLObjectProperty, cls: OWLClass): (OWLAxiom, (OWLClass, Restriction)) = {
-    val namedPropertyExpression = Class(s"$prefix/expression/${UUID.randomUUID}")
-    (namedPropertyExpression EquivalentTo (property some cls), namedPropertyExpression -> Restriction(property, cls))
+  def extractAllRestrictions(ont: OWLOntology): Observable[Restriction] = {
+    val properties = ont.getObjectPropertiesInSignature(Imports.INCLUDED).asScala.toSet
+    val classes = ont.getClassesInSignature(Imports.INCLUDED).asScala.toSet - OWLThing - OWLNothing
+    for {
+      property <- Observable.fromIterable(properties)
+      cls <- Observable.fromIterable(classes)
+    } yield Restriction(property, cls)
   }
 
-  def inferAxioms(startAxioms: Set[OWLAxiom], assertedAxioms: Set[OWLAxiom], mappings: Map[OWLClass, Restriction]): (Set[OWLAxiom], Set[OWLAxiom]) = {
-    val manager = OWLManager.createOWLOntologyManager()
-    val factory = manager.getOWLDataFactory
-    val expressionsOntology = manager.createOntology((startAxioms ++ assertedAxioms).asJava)
-    val reasoner = new ElkReasonerFactory().createReasoner(expressionsOntology)
-    val unsatisfiableClassesCount = reasoner.getUnsatisfiableClasses.getEntitiesMinusBottom.size
-    if (unsatisfiableClassesCount > 0) logger.error(s"Ontology has $unsatisfiableClassesCount unsatisifiable classes. Proceeding anyway...")
-    val (newNonRedundantAxioms, newRedundantAxioms) = traverse(List(reasoner.getTopClassNode), reasoner, Set.empty, Set.empty, Set.empty, mappings)
-    reasoner.dispose()
-    manager.removeOntology(expressionsOntology)
-    (newNonRedundantAxioms, newRedundantAxioms)
-  }
-
-  /**
-   * This is similar to InferredSubClassAxiomGenerator in OWL API, but much more efficient
-   */
-  @tailrec
-  def traverse(nodes: List[Node[OWLClass]], reasoner: OWLReasoner, nonRedundantAcc: Set[OWLAxiom], redundantAcc: Set[OWLAxiom], traversed: Set[Node[OWLClass]], mappings: Map[OWLClass, Restriction]): (Set[OWLAxiom], Set[OWLAxiom]) = nodes match {
-    case Nil                               => (nonRedundantAcc, redundantAcc)
-    case node :: rest if traversed(node)   => traverse(rest, reasoner, nonRedundantAcc, redundantAcc, traversed, mappings)
-    case node :: rest if node.isBottomNode => traverse(rest, reasoner, nonRedundantAcc, redundantAcc, traversed + node, mappings)
-    case node :: rest =>
-      val directSubclassNodes = reasoner.getSubClasses(node.getRepresentativeElement, true).asScala.filterNot(_.isBottomNode)
-      val allSubclassNodes = reasoner.getSubClasses(node.getRepresentativeElement, false).asScala.filterNot(_.isBottomNode)
-      val superclasses = node.getEntities.asScala
-      val directSubclasses = directSubclassNodes.flatMap(_.getEntities.asScala)
-      val allSubclasses = allSubclassNodes.flatMap(_.getEntities.asScala)
-      val nonRedundantAxioms = for {
-        superclass <- superclasses
-        if mappings.contains(superclass)
-        subclass <- directSubclasses
-        if !mappings.contains(subclass)
-        if !subclass.isOWLNothing
-      } yield subclass Annotation (AnnotationProperty(mappings(superclass).property.getIRI), mappings(superclass).filler)
-      val redundantAxioms = for {
-        superclass <- superclasses
-        if mappings.contains(superclass)
-        subclass <- allSubclasses
-        if !mappings.contains(subclass)
-        if !subclass.isOWLNothing
-      } yield subclass Annotation (AnnotationProperty(mappings(superclass).property.getIRI), mappings(superclass).filler)
-      traverse(directSubclassNodes.toList ::: rest, reasoner, nonRedundantAcc ++ nonRedundantAxioms, redundantAcc ++ redundantAxioms, traversed + node, mappings)
+  def processRestriction(combo: Restriction, whelk: ReasonerState): (Set[Triple], Set[Triple]) = {
+    val Restriction(property, cls) = combo
+    val propertyID = property.getIRI.toString
+    val clsID = cls.getIRI.toString
+    val queryConcept = AtomicConcept(s"$propertyID$clsID")
+    val restriction = ExistentialRestriction(Role(propertyID), AtomicConcept(clsID))
+    val axioms = Set(ConceptInclusion(queryConcept, restriction), ConceptInclusion(restriction, queryConcept))
+    val updatedWhelk = Reasoner.assert(axioms, whelk)
+    val predicate = NodeFactory.createURI(property.getIRI.toString)
+    val target = NodeFactory.createURI(cls.getIRI.toString)
+    val (equivalents, directSubclasses) = updatedWhelk.directlySubsumes(queryConcept)
+    val subclasses = updatedWhelk.closureSubsBySuperclass(queryConcept).collect { case x: AtomicConcept => x } - queryConcept - BuiltIn.Bottom
+    if (!equivalents(BuiltIn.Bottom)) {
+      val nonredundantAxioms = (directSubclasses - BuiltIn.Bottom ++ equivalents).map(sc => Triple.create(NodeFactory.createURI(sc.id), predicate, target))
+      val redundantAxioms = subclasses.map(sc => Triple.create(NodeFactory.createURI(sc.id), predicate, target))
+      (nonredundantAxioms, redundantAxioms)
+    } else (Set.empty[Triple], Set.empty[Triple])
   }
 
   case class Restriction(property: OWLObjectProperty, filler: OWLClass)

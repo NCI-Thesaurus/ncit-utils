@@ -18,6 +18,8 @@ scalacOptions in Test ++= Seq("-Yrangepos")
 
 mainClass in Compile := Some("org.renci.ncit.Main")
 
+testFrameworks += new TestFramework("utest.runner.Framework")
+
 fork in Test := true
 
 libraryDependencies ++= {
@@ -25,11 +27,15 @@ libraryDependencies ++= {
     "org.phenoscape"              %% "scowl"                  % "1.3",
     "net.sourceforge.owlapi"      %  "owlapi-distribution"    % "4.3.1",
     "org.semanticweb.elk"         %  "elk-owlapi"             % "0.4.3",
+    "org.geneontology"            %% "whelk"                  % "0.1.3",
+    "io.monix"                    %% "monix"                  % "3.0.0-RC1",
+    "org.apache.jena"             %  "apache-jena-libs"       % "3.8.0" exclude("org.slf4j", "slf4j-log4j12"),
     "org.backuity.clist"          %% "clist-core"             % "3.2.2",
     "org.backuity.clist"          %% "clist-macros"           % "3.2.2" % "provided",
     "com.github.pathikrit"        %% "better-files"           % "3.1.0",
     "com.typesafe.scala-logging"  %% "scala-logging"          % "3.7.1",
     "ch.qos.logback"              %  "logback-classic"        % "1.2.3",
-    "org.codehaus.groovy"         %  "groovy-all"             % "2.4.6"
+    "org.codehaus.groovy"         %  "groovy-all"             % "2.4.6",
+    "com.lihaoyi"                 %% "utest"                  % "0.6.6"  % Test
   )
 }
