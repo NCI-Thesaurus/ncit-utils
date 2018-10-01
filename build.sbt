@@ -18,6 +18,8 @@ scalacOptions in Test ++= Seq("-Yrangepos")
 
 mainClass in Compile := Some("org.renci.ncit.Main")
 
+testFrameworks += new TestFramework("utest.runner.Framework")
+
 fork in Test := true
 
 libraryDependencies ++= {
@@ -33,6 +35,7 @@ libraryDependencies ++= {
     "com.github.pathikrit"        %% "better-files"           % "3.1.0",
     "com.typesafe.scala-logging"  %% "scala-logging"          % "3.7.1",
     "ch.qos.logback"              %  "logback-classic"        % "1.2.3",
-    "org.codehaus.groovy"         %  "groovy-all"             % "2.4.6"
+    "org.codehaus.groovy"         %  "groovy-all"             % "2.4.6",
+    "com.lihaoyi"                 %% "utest"                  % "0.6.6"  % Test
   )
 }

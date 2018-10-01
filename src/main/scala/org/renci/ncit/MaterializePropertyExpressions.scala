@@ -34,35 +34,12 @@ object MaterializePropertyExpressions extends Command(description = "Materialize
     redundantRDFWriter.start()
     val manager = OWLManager.createOWLOntologyManager()
     val ontology = manager.loadOntologyFromOntologyDocument(ontologyFile)
-    val properties = ontology.getObjectPropertiesInSignature(Imports.INCLUDED).asScala.toSet
-    val classes = ontology.getClassesInSignature(Imports.INCLUDED).asScala.toSet - OWLThing - OWLNothing
     val whelkOntology = Bridge.ontologyToAxioms(ontology)
     logger.info("Running reasoner")
     val whelk = Reasoner.assert(whelkOntology)
     logger.info("Done running reasoner")
-    val restrictions = for {
-      property <- Observable.fromIterable(properties)
-      cls <- Observable.fromIterable(classes)
-    } yield Restriction(property, cls)
-    val processed = restrictions.mapParallelUnordered(Runtime.getRuntime.availableProcessors) { case Restriction(property, cls) =>
-      Task {
-        val propertyID = property.getIRI.toString
-        val clsID = cls.getIRI.toString
-        val queryConcept = AtomicConcept(s"$propertyID$clsID")
-        val restriction = ExistentialRestriction(Role(propertyID), AtomicConcept(clsID))
-        val axioms = Set(ConceptInclusion(queryConcept, restriction), ConceptInclusion(restriction, queryConcept))
-        val updatedWhelk = Reasoner.assert(axioms, whelk)
-        val predicate = NodeFactory.createURI(property.getIRI.toString)
-        val target = NodeFactory.createURI(cls.getIRI.toString)
-        val (equivalents, directSubclasses) = updatedWhelk.directlySubsumes(queryConcept)
-        val subclasses = updatedWhelk.closureSubsBySuperclass(queryConcept).collect { case x: AtomicConcept => x } - queryConcept - BuiltIn.Bottom
-        if (!equivalents(BuiltIn.Bottom)) {
-          val nonredundantAxioms = (directSubclasses - BuiltIn.Bottom ++ equivalents).map(sc => Triple.create(NodeFactory.createURI(sc.id), predicate, target))
-          val redundantAxioms = subclasses.map(sc => Triple.create(NodeFactory.createURI(sc.id), predicate, target))
-          (nonredundantAxioms, redundantAxioms)
-        } else (Set.empty[Triple], Set.empty[Triple])
-      }
-    }
+    val restrictions = extractAllRestrictions(ontology)
+    val processed = restrictions.mapParallelUnordered(Runtime.getRuntime.availableProcessors)(r => Task(processRestriction(r, whelk)))
     processed.foreachL { case (nonredundant, redundant) =>
       nonredundant.foreach(nonredundantRDFWriter.triple)
       redundant.foreach(redundantRDFWriter.triple)
@@ -71,6 +48,34 @@ object MaterializePropertyExpressions extends Command(description = "Materialize
     nonredundantOutputStream.close()
     redundantRDFWriter.finish()
     redundantOutputStream.close()
+  }
+
+  def extractAllRestrictions(ont: OWLOntology): Observable[Restriction] = {
+    val properties = ont.getObjectPropertiesInSignature(Imports.INCLUDED).asScala.toSet
+    val classes = ont.getClassesInSignature(Imports.INCLUDED).asScala.toSet - OWLThing - OWLNothing
+    for {
+      property <- Observable.fromIterable(properties)
+      cls <- Observable.fromIterable(classes)
+    } yield Restriction(property, cls)
+  }
+
+  def processRestriction(combo: Restriction, whelk: ReasonerState): (Set[Triple], Set[Triple]) = {
+    val Restriction(property, cls) = combo
+    val propertyID = property.getIRI.toString
+    val clsID = cls.getIRI.toString
+    val queryConcept = AtomicConcept(s"$propertyID$clsID")
+    val restriction = ExistentialRestriction(Role(propertyID), AtomicConcept(clsID))
+    val axioms = Set(ConceptInclusion(queryConcept, restriction), ConceptInclusion(restriction, queryConcept))
+    val updatedWhelk = Reasoner.assert(axioms, whelk)
+    val predicate = NodeFactory.createURI(property.getIRI.toString)
+    val target = NodeFactory.createURI(cls.getIRI.toString)
+    val (equivalents, directSubclasses) = updatedWhelk.directlySubsumes(queryConcept)
+    val subclasses = updatedWhelk.closureSubsBySuperclass(queryConcept).collect { case x: AtomicConcept => x } - queryConcept - BuiltIn.Bottom
+    if (!equivalents(BuiltIn.Bottom)) {
+      val nonredundantAxioms = (directSubclasses - BuiltIn.Bottom ++ equivalents).map(sc => Triple.create(NodeFactory.createURI(sc.id), predicate, target))
+      val redundantAxioms = subclasses.map(sc => Triple.create(NodeFactory.createURI(sc.id), predicate, target))
+      (nonredundantAxioms, redundantAxioms)
+    } else (Set.empty[Triple], Set.empty[Triple])
   }
 
   case class Restriction(property: OWLObjectProperty, filler: OWLClass)
