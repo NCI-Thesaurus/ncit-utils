@@ -4,13 +4,13 @@ organization  := "org.renci"
 
 name          := "ncit-utils"
 
-version       := "0.4.1"
+version       := "0.5"
 
 licenses := Seq("BSD-3-Clause" -> url("https://opensource.org/licenses/BSD-3-Clause"))
 
 homepage := Some(url("https://github.com/NCI-Thesaurus/ncit-utils"))
 
-scalaVersion  := "2.12.3"
+scalaVersion  := "2.12.6"
 
 scalacOptions := Seq("-unchecked", "-deprecation", "-encoding", "utf8")
 
