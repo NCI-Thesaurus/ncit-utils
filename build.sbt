@@ -10,7 +10,7 @@ licenses := Seq("BSD-3-Clause" -> url("https://opensource.org/licenses/BSD-3-Cla
 
 homepage := Some(url("https://github.com/NCI-Thesaurus/ncit-utils"))
 
-scalaVersion  := "2.12.6"
+scalaVersion  := "2.12.8"
 
 scalacOptions := Seq("-unchecked", "-deprecation", "-encoding", "utf8")
 
@@ -24,8 +24,8 @@ fork in Test := true
 
 libraryDependencies ++= {
   Seq(
-    "org.phenoscape"              %% "scowl"                  % "1.3",
-    "net.sourceforge.owlapi"      %  "owlapi-distribution"    % "4.3.1",
+    "org.phenoscape"              %% "scowl"                  % "1.3.4",
+    "net.sourceforge.owlapi"      %  "owlapi-distribution"    % "4.5.13",
     "org.semanticweb.elk"         %  "elk-owlapi"             % "0.4.3",
     "org.geneontology"            %% "whelk"                  % "0.2.1",
     "io.monix"                    %% "monix"                  % "3.0.0-RC1",
@@ -36,6 +36,6 @@ libraryDependencies ++= {
     "com.typesafe.scala-logging"  %% "scala-logging"          % "3.7.1",
     "ch.qos.logback"              %  "logback-classic"        % "1.2.3",
     "org.codehaus.groovy"         %  "groovy-all"             % "2.4.6",
-    "com.lihaoyi"                 %% "utest"                  % "0.6.6"  % Test
+    "com.lihaoyi"                 %% "utest"                  % "0.6.9"  % Test
   )
 }
