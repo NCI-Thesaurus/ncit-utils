@@ -25,6 +25,8 @@ object MaterializePropertyExpressions extends Command(description = "Materialize
   var nonRedundantOutputFile = arg[File](name = "nonredundant")
   var redundantOutputFile = arg[File](name = "redundant")
 
+  private val OWLTopObjectProperty: OWLObjectProperty = OWLManager.getOWLDataFactory.getOWLTopObjectProperty
+
   override def run(): Unit = {
     val nonredundantOutputStream = new FileOutputStream(nonRedundantOutputFile)
     val nonredundantRDFWriter = StreamRDFWriter.getWriterStream(nonredundantOutputStream, RDFFormat.TURTLE_FLAT)
@@ -51,7 +53,7 @@ object MaterializePropertyExpressions extends Command(description = "Materialize
   }
 
   def extractAllRestrictions(ont: OWLOntology): Observable[Restriction] = {
-    val properties = ont.getObjectPropertiesInSignature(Imports.INCLUDED).asScala.toSet
+    val properties = ont.getObjectPropertiesInSignature(Imports.INCLUDED).asScala.toSet - OWLTopObjectProperty
     val classes = ont.getClassesInSignature(Imports.INCLUDED).asScala.toSet - OWLThing - OWLNothing
     for {
       property <- Observable.fromIterable(properties)
