@@ -2,7 +2,6 @@ package org.renci.ncit
 
 import java.io.{File, FileOutputStream}
 
-import com.typesafe.scalalogging.LazyLogging
 import monix.eval._
 import monix.execution.Scheduler.Implicits.global
 import monix.reactive._
@@ -16,28 +15,30 @@ import org.semanticweb.owlapi.apibinding.OWLManager
 import org.semanticweb.owlapi.model._
 import org.semanticweb.owlapi.model.parameters.Imports
 
-import scala.collection.JavaConverters._
 import scala.concurrent.duration.Duration
+import scala.jdk.CollectionConverters._
 
-object MaterializePropertyExpressions extends Command(description = "Materialize property expressions") with Common with LazyLogging {
+object MaterializePropertyExpressions extends Command(description = "Materialize property expressions") with Common {
 
   var ontologyFile = arg[File](name = "ontology")
   var nonRedundantOutputFile = arg[File](name = "nonredundant")
   var redundantOutputFile = arg[File](name = "redundant")
 
+  private val OWLTopObjectProperty: OWLObjectProperty = OWLManager.getOWLDataFactory.getOWLTopObjectProperty
+
   override def run(): Unit = {
     val nonredundantOutputStream = new FileOutputStream(nonRedundantOutputFile)
-    val nonredundantRDFWriter = StreamRDFWriter.getWriterStream(nonredundantOutputStream, RDFFormat.TURTLE_FLAT)
+    val nonredundantRDFWriter = StreamRDFWriter.getWriterStream(nonredundantOutputStream, RDFFormat.TURTLE_FLAT, null)
     nonredundantRDFWriter.start()
     val redundantOutputStream = new FileOutputStream(redundantOutputFile)
-    val redundantRDFWriter = StreamRDFWriter.getWriterStream(redundantOutputStream, RDFFormat.TURTLE_FLAT)
+    val redundantRDFWriter = StreamRDFWriter.getWriterStream(redundantOutputStream, RDFFormat.TURTLE_FLAT, null)
     redundantRDFWriter.start()
     val manager = OWLManager.createOWLOntologyManager()
     val ontology = manager.loadOntologyFromOntologyDocument(ontologyFile)
     val whelkOntology = Bridge.ontologyToAxioms(ontology)
-    logger.info("Running reasoner")
+    scribe.info("Running reasoner")
     val whelk = Reasoner.assert(whelkOntology)
-    logger.info("Done running reasoner")
+    scribe.info("Done running reasoner")
     val restrictions = extractAllRestrictions(ontology)
     val processed = restrictions.mapParallelUnordered(Runtime.getRuntime.availableProcessors)(r => Task(processRestriction(r, whelk)))
     processed.foreachL { case (nonredundant, redundant) =>
@@ -51,7 +52,7 @@ object MaterializePropertyExpressions extends Command(description = "Materialize
   }
 
   def extractAllRestrictions(ont: OWLOntology): Observable[Restriction] = {
-    val properties = ont.getObjectPropertiesInSignature(Imports.INCLUDED).asScala.toSet
+    val properties = ont.getObjectPropertiesInSignature(Imports.INCLUDED).asScala.toSet - OWLTopObjectProperty
     val classes = ont.getClassesInSignature(Imports.INCLUDED).asScala.toSet - OWLThing - OWLNothing
     for {
       property <- Observable.fromIterable(properties)
