@@ -4,7 +4,6 @@ import java.nio.charset.StandardCharsets
 import java.util.Collections
 
 import better.files._
-import com.typesafe.scalalogging.LazyLogging
 import org.backuity.clist._
 import org.phenoscape.scowl._
 import org.semanticweb.owlapi.apibinding.OWLManager
@@ -12,9 +11,9 @@ import org.semanticweb.owlapi.model.{AddAxiom, IRI, OWLLiteral, RemoveAxiom}
 import org.semanticweb.owlapi.search.EntitySearcher
 import org.semanticweb.owlapi.util.OWLEntityRenamer
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
-object ReplaceMappedTerms extends Command(description = "Replace mapped terms") with Common with LazyLogging {
+object ReplaceMappedTerms extends Command(description = "Replace mapped terms") with Common {
 
   var mappingFile = arg[String](name = "mappings")
   var ontology = arg[java.io.File](name = "ontology")
