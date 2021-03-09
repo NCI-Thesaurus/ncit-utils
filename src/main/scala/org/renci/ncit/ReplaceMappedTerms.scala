@@ -21,6 +21,8 @@ object ReplaceMappedTerms extends Command(description = "Replace mapped terms") 
   var dropColumn = arg[Int](name = "drop")
   var outputFile = arg[java.io.File](name = "output")
 
+  private val TermReplacedBy = AnnotationProperty("http://purl.obolibrary.org/obo/IAO_0100001")
+
   override def run(): Unit = {
     val manager = OWLManager.createOWLOntologyManager()
     val ont = manager.loadOntologyFromOntologyDocument(ontology)
@@ -36,11 +38,13 @@ object ReplaceMappedTerms extends Command(description = "Replace mapped terms") 
       manager.applyChanges(logicalChanges.asJava)
       val labelChanges = EntitySearcher.getAnnotationAssertionAxioms(oldTerm, ont).asScala.filter(_.getProperty == RDFSLabel).flatMap { oldLabelAxiom =>
         val oldLabel = oldLabelAxiom.getValue.asInstanceOf[OWLLiteral].getLiteral
-        val newLabelAxiom = oldTerm Annotation (RDFSLabel, s"obsolete $oldLabel")
+        val newLabelAxiom = oldTerm Annotation(RDFSLabel, s"obsolete $oldLabel")
         Set(
           new AddAxiom(ont, manager.getOWLDataFactory.getDeprecatedOWLAnnotationAssertionAxiom(oldTerm)),
           new RemoveAxiom(ont, oldLabelAxiom),
-          new AddAxiom(ont, newLabelAxiom))
+          new AddAxiom(ont, newLabelAxiom),
+          new AddAxiom(ont, oldTerm.Annotation(TermReplacedBy, newTerm))
+        )
       }
       manager.applyChanges(labelChanges.toList.asJava)
       Class(newTerm)
