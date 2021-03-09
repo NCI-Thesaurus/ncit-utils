@@ -7,7 +7,7 @@ import better.files._
 import org.backuity.clist._
 import org.phenoscape.scowl._
 import org.semanticweb.owlapi.apibinding.OWLManager
-import org.semanticweb.owlapi.model.{AddAxiom, IRI, OWLLiteral, RemoveAxiom}
+import org.semanticweb.owlapi.model.{AddAxiom, IRI, OWLAxiomChange, OWLLiteral, RemoveAxiom}
 import org.semanticweb.owlapi.search.EntitySearcher
 import org.semanticweb.owlapi.util.OWLEntityRenamer
 
@@ -38,13 +38,14 @@ object ReplaceMappedTerms extends Command(description = "Replace mapped terms") 
       manager.applyChanges(logicalChanges.asJava)
       val labelChanges = EntitySearcher.getAnnotationAssertionAxioms(oldTerm, ont).asScala.filter(_.getProperty == RDFSLabel).flatMap { oldLabelAxiom =>
         val oldLabel = oldLabelAxiom.getValue.asInstanceOf[OWLLiteral].getLiteral
-        val newLabelAxiom = oldTerm Annotation(RDFSLabel, s"obsolete $oldLabel")
+        val newLabelAxiomChanges = if (!oldLabel.startsWith("obsolete ")) {
+          val newLabelAxiom = oldTerm Annotation(RDFSLabel, s"obsolete $oldLabel")
+          Set(new RemoveAxiom(ont, oldLabelAxiom), new AddAxiom(ont, newLabelAxiom))
+        } else Set.empty[OWLAxiomChange]
         Set(
           new AddAxiom(ont, manager.getOWLDataFactory.getDeprecatedOWLAnnotationAssertionAxiom(oldTerm)),
-          new RemoveAxiom(ont, oldLabelAxiom),
-          new AddAxiom(ont, newLabelAxiom),
           new AddAxiom(ont, oldTerm.Annotation(TermReplacedBy, newTerm))
-        )
+        ) ++ newLabelAxiomChanges
       }
       manager.applyChanges(labelChanges.toList.asJava)
       Class(newTerm)
