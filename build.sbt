@@ -22,6 +22,8 @@ testFrameworks += new TestFramework("utest.runner.Framework")
 
 fork in Test := true
 
+val circeVersion = "0.13.0"
+
 libraryDependencies ++= {
   Seq(
     "org.phenoscape"              %% "scowl"                  % "1.3.4",
@@ -34,6 +36,10 @@ libraryDependencies ++= {
     "org.backuity.clist"          %% "clist-macros"           % "3.5.1" % Provided,
     "com.github.pathikrit"        %% "better-files"           % "3.9.1",
     "com.outr"                    %% "scribe-slf4j"           % "2.7.12",
+    "io.circe"                    %% "circe-core"             % circeVersion,
+    "io.circe"                    %% "circe-generic"          % circeVersion,
+    "io.circe"                    %% "circe-parser"           % circeVersion,
+    "io.circe"                    %% "circe-yaml"             % circeVersion,
     "com.lihaoyi"                 %% "utest"                  % "0.7.4"  % Test
   )
 }
