@@ -4,7 +4,7 @@ organization  := "org.renci"
 
 name          := "ncit-utils"
 
-version       := "0.5.2"
+version       := "0.6"
 
 licenses := Seq("BSD-3-Clause" -> url("https://opensource.org/licenses/BSD-3-Clause"))
 
